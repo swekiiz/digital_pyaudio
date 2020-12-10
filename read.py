@@ -25,9 +25,13 @@ stop_all_thread = False
 
 # global variable
 fs = 44100
-filename = 'SuperMarioMono.wav'
 wf = None
+music_is_play = False
+music_is_run = False
+current_index = 0
 
+filename = ['supermariomono.wav', 'dancemonkeymono.wav']
+N_SONG = len(filename)
 
 def setup_pin():
     # print('setup pin')
@@ -105,8 +109,10 @@ def play_sound_thread():
             stream.close()
             p.terminate()
             return
-        stream.write(data)
-        data = wf.readframes(CHUNK)
+
+        if music_is_play and music_is_run:
+            stream.write(data)
+            data = wf.readframes(CHUNK)
 
     loop_end_time = time.time()
     print("This song have been play with : ",
@@ -129,13 +135,30 @@ def show_wave_thread():
     plt.show()
 
 
+def song_start():
+    global wf
+    global music_is_play
+    global music_is_run
+    
+    try:
+        wf = wave.open(r'./music/' + filename[current_index], 'rb')
+    except:
+        print("ERROR : can't open file")
+    else:
+        music_is_play = True
+        music_is_run = True
+        thread_for_play_sound = Thread(target=play_sound_thread)
+        thread_for_play_sound.start()
+        # thread_for_send_data = Thread(target=send_data_bit_thread)
+        # thread_for_send_data.start()
+
 if __name__ == "__main__":
 
     PROGRAM_RUN = True
     setup_pin()
+    p2 = p1 = p0 = -1  # set_prev_state -> -1
 
     while PROGRAM_RUN:
-
         # input from terminal
         try:
             inp = input("State plz : ")
@@ -144,30 +167,40 @@ if __name__ == "__main__":
             print("ERROR : input fail plz try again.")
             continue
 
-        if (b2, b1, b0) == (0, 0, 0):  # play sound on computer
-            try:
-                wf = wave.open(r'./music/' + filename, 'rb')
-            except:
-                print("ERROR : can't open file")
-            else:
-                thread_for_play_sound = Thread(target=play_sound_thread)
-                thread_for_play_sound.start()
+        if (p2, p1, p0) == (b2, b1, b0):
+            print('same as previous command.')
+            continue
+
+        p2, p1, p0 = b2, b1, b0
+
+        if (b2, b1, b0) == (0, 0, 0):  
+            pass
 
         elif (b2, b1, b0) == (0, 0, 1):  # send data bit to Raspi..
-            try:
-                wf = wave.open(r'./music/' + filename, 'rb')
-            except:
-                print("ERROR : can't open file")
-            else:
-                thread_for_send_data = Thread(target=send_data_bit_thread)
-                thread_for_send_data.start()
+            if not music_is_play and not music_is_run:
+                song_start()
+            elif music_is_run and not music_is_play:
+                sleep(0.5)
+                music_is_play = True
 
         elif (b2, b1, b0) == (0, 1, 0):
-            pass
+            if music_is_run and music_is_play:
+                music_is_play = False
+
         elif (b2, b1, b0) == (0, 1, 1):
-            pass
+            current_index = (current_index + 1) % N_SONG
+            stop_all_thread = True
+            sleep(1.0)
+            stop_all_thread = False
+            song_start()
+
         elif (b2, b1, b0) == (1, 0, 0):
-            pass
+            current_index = (current_index - 1) % N_SONG
+            stop_all_thread = True
+            sleep(1.0)
+            stop_all_thread = False
+            song_start()
+
         elif (b2, b1, b0) == (1, 0, 1):
             pass
         elif (b2, b1, b0) == (1, 1, 0):
@@ -183,3 +216,12 @@ if __name__ == "__main__":
     stop_all_thread = True
     print('Exit program !')
     exit(0)
+
+# 0 -> idle
+# 1 -> play
+# 2 -> stop
+# 3 -> next
+# 4 -> prev
+# 5 ->
+# 6 ->
+# 7 ->
