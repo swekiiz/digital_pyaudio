@@ -7,6 +7,7 @@ import wave
 import pyaudio
 import sys
 import numpy as np
+import json
 from threading import Thread
 from time import sleep
 import time
@@ -14,6 +15,13 @@ from matplotlib import pyplot as plt
 
 # GPIO.setwarnings(False)
 # GPIO.setmode(GPIO.BCM)
+JSON = open('song_list.json',)
+
+filename = json.load(JSON)['song']
+
+# print(filename)
+
+JSON.close()
 
 # constant variable
 CHUNK = 1024
@@ -30,8 +38,9 @@ music_is_play = False
 music_is_run = False
 current_index = 0
 
-filename = ['supermariomono.wav', 'dancemonkeymono.wav']
+
 N_SONG = len(filename)
+
 
 def setup_pin():
     # print('setup pin')
@@ -139,7 +148,7 @@ def song_start():
     global wf
     global music_is_play
     global music_is_run
-    
+
     try:
         wf = wave.open(r'./music/' + filename[current_index], 'rb')
     except:
@@ -151,6 +160,7 @@ def song_start():
         thread_for_play_sound.start()
         # thread_for_send_data = Thread(target=send_data_bit_thread)
         # thread_for_send_data.start()
+
 
 if __name__ == "__main__":
 
@@ -173,7 +183,7 @@ if __name__ == "__main__":
 
         p2, p1, p0 = b2, b1, b0
 
-        if (b2, b1, b0) == (0, 0, 0):  
+        if (b2, b1, b0) == (0, 0, 0):
             pass
 
         elif (b2, b1, b0) == (0, 0, 1):  # send data bit to Raspi..
