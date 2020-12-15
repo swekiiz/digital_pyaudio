@@ -12,9 +12,40 @@ from threading import Thread
 from time import sleep
 import time
 from matplotlib import pyplot as plt
+from cpufreq import cpuFreq
 
-# GPIO.setwarnings(False)
-# GPIO.setmode(GPIO.BCM)
+### RPI ZONE
+
+import RPi.GPIO as GPIO
+import time
+import random
+import math
+GPIO.setmode(GPIO.BOARD)
+
+PIN_CLK  = 3
+PIN_DATA = 5
+PIN_CLR  = 7
+
+GPIO.setwarnings(False)
+GPIO.setup(PIN_CLK, GPIO.OUT)
+GPIO.setup(PIN_DATA, GPIO.OUT)
+GPIO.setup(PIN_CLR, GPIO.OUT)
+
+def send_clk():
+    GPIO.output(PIN_CLK, True)
+    GPIO.output(PIN_CLK, False)
+
+def send_clr():
+    GPIO.output(PIN_CLR, True)
+    GPIO.output(PIN_CLR, False)
+
+SAMPLE_RATE = 8000
+cpu= cpuFreq()
+freqs= cpu.get_frequencies()
+DELAY_TIME = freqs[0]/SAMPLE_RATE
+
+### END OF RPI ZONE
+
 JSON = open('song_list.json',)
 
 filename = json.load(JSON)['song']
@@ -42,56 +73,34 @@ current_index = 0
 N_SONG = len(filename)
 
 
-def setup_pin():
-    # print('setup pin')
-    # for x in led_lst:
-    #     GPIO.setup(x, GPIO.OUT, initial=GPIO.HIGH)
-    pass
-
-
 def send_data_bit_thread():
     wf.rewind()
-    p = pyaudio.PyAudio()
-    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                    channels=wf.getnchannels(),
-                    rate=wf.getframerate(),
-                    frames_per_buffer=CHUNK,
-                    output=True)
-
     buffer = wf.readframes(1)
-    test_time = time.time()
+    print(wf.getnchannels())
+    c = 0
     while buffer != '':
 
         if stop_all_thread:
-            stream.close()
-            p.terminate()
             return
-
-        _16bits = int.from_bytes(buffer, byteorder='big')
-
+        _16bits = int.from_bytes(buffer, byteorder='little')
+        #print(_16bits)
         # send_time = time.time()
-
+        stack = ""
         for i in range(16):
-            if _16bits & 1 == 1:
-                pass
-                # GPIO.output(led_lst[n], GPIO.HIGH)
-            else:
-                pass
-                # GPIO.output(led_lst[n], GPIO.LOW)
+            GPIO.output(PIN_DATA, _16bits & 1 )
+            #stack += bin(_16bits)[-1]
             _16bits >>= 1
-
+            send_clk() ## send clock to FPAG
+        buffer = wf.readframes(1)
+        ### 8000: 0.00001
+        #time.sleep(0.000005)
+        #print("Sended:", stack[::-1])
         # print('send_time  :', time.time() - send_time)
 
-        # stream.write(buffer)
         # buffer = wf.readframes(1)
 
         # if time.time() - test_time > 0.05:
         #     break
-
-    # terminate all
-    stream.close()
-    p.terminate()
-
 
 def play_sound_thread():
     wf.rewind()
@@ -156,16 +165,16 @@ def song_start():
     else:
         music_is_play = True
         music_is_run = True
-        thread_for_play_sound = Thread(target=play_sound_thread)
-        thread_for_play_sound.start()
-        # thread_for_send_data = Thread(target=send_data_bit_thread)
-        # thread_for_send_data.start()
+        # thread_for_play_sound = Thread(target=play_sound_thread)
+        # thread_for_play_sound.start()
+        thread_for_send_data = Thread(target=send_data_bit_thread)
+        thread_for_send_data.start()
 
 
 if __name__ == "__main__":
-
+    print(1/DELAY_TIME)
     PROGRAM_RUN = True
-    setup_pin()
+    send_clr()
     p2 = p1 = p0 = -1  # set_prev_state -> -1
 
     while PROGRAM_RUN:
