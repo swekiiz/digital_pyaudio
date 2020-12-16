@@ -14,7 +14,7 @@ import time
 from matplotlib import pyplot as plt
 from cpufreq import cpuFreq
 
-### RPI ZONE
+# RPI ZONE
 
 import RPi.GPIO as GPIO
 import time
@@ -22,29 +22,41 @@ import random
 import math
 GPIO.setmode(GPIO.BOARD)
 
-PIN_CLK  = 3
+PIN_CLK = 3
 PIN_DATA = 5
-PIN_CLR  = 7
+PIN_CLR = 7
+
+PIN_BIT0 = 37
+PIN_BIT1 = 35
+PIN_BIT2 = 33
+PIN_CLK_BIT = 31
 
 GPIO.setwarnings(False)
 GPIO.setup(PIN_CLK, GPIO.OUT)
 GPIO.setup(PIN_DATA, GPIO.OUT)
 GPIO.setup(PIN_CLR, GPIO.OUT)
+GPIO.setup(PIN_BIT0, GPIO.IN)
+GPIO.setup(PIN_BIT1, GPIO.IN)
+GPIO.setup(PIN_BIT2, GPIO.IN)
+GPIO.setup(PIN_CLK_BIT, GPIO.IN)
+
 
 def send_clk():
     GPIO.output(PIN_CLK, True)
     GPIO.output(PIN_CLK, False)
 
+
 def send_clr():
     GPIO.output(PIN_CLR, True)
     GPIO.output(PIN_CLR, False)
 
+
 SAMPLE_RATE = 8000
-cpu= cpuFreq()
-freqs= cpu.get_frequencies()
+cpu = cpuFreq()
+freqs = cpu.get_frequencies()
 DELAY_TIME = freqs[0]/SAMPLE_RATE
 
-### END OF RPI ZONE
+# END OF RPI ZONE
 
 JSON = open('song_list.json',)
 
@@ -63,12 +75,13 @@ BITREAD = 16
 stop_all_thread = False
 
 # global variable
+PROGRAM_RUN = True
 fs = 44100
 wf = None
 music_is_play = False
 music_is_run = False
 current_index = 0
-
+p0 = p1 = p2 = b0 = b1 = b2 = None
 
 N_SONG = len(filename)
 
@@ -82,18 +95,19 @@ def send_data_bit_thread():
 
         if stop_all_thread:
             return
+        # if music_is_play and music_is_run:
         _16bits = int.from_bytes(buffer, byteorder='little')
-        #print(_16bits)
+        # print(_16bits)
         # send_time = time.time()
         stack = ""
         for i in range(16):
-            GPIO.output(PIN_DATA, _16bits & 1 )
+            GPIO.output(PIN_DATA, _16bits & 1)
             #stack += bin(_16bits)[-1]
             _16bits >>= 1
-            send_clk() ## send clock to FPAG
+            send_clk()  # send clock to FPAG
         buffer = wf.readframes(1)
-        ### 8000: 0.00001
-        #time.sleep(0.000005)
+        # 8000: 0.00001
+        # time.sleep(0.000005)
         #print("Sended:", stack[::-1])
         # print('send_time  :', time.time() - send_time)
 
@@ -101,6 +115,7 @@ def send_data_bit_thread():
 
         # if time.time() - test_time > 0.05:
         #     break
+
 
 def play_sound_thread():
     wf.rewind()
@@ -171,14 +186,18 @@ def song_start():
         thread_for_send_data.start()
 
 
-if __name__ == "__main__":
-    print(1/DELAY_TIME)
-    PROGRAM_RUN = True
-    send_clr()
-    p2 = p1 = p0 = -1  # set_prev_state -> -1
-
+def terminal():
+    global p0
+    global p1
+    global p2
+    global b0
+    global b1
+    global b2
     while PROGRAM_RUN:
         # input from terminal
+        if stop_all_thread:
+            return
+
         try:
             inp = input("State plz : ")
             b2, b1, b0 = tuple(map(int, inp.split()))
@@ -186,14 +205,42 @@ if __name__ == "__main__":
             print("ERROR : input fail plz try again.")
             continue
 
+        if stop_all_thread:
+            return
+
         if (p2, p1, p0) == (b2, b1, b0):
             print('same as previous command.')
             continue
 
         p2, p1, p0 = b2, b1, b0
 
+
+if __name__ == "__main__":
+    print(1/DELAY_TIME)
+    PROGRAM_RUN = True
+    send_clr()
+    p2 = p1 = p0 = -1  # set_prev_state -> -1
+
+    terminal_thread = Thread(target=terminal)
+    terminal_thread.start()
+
+    pi_clock = 0
+    io_0 = io_1 = io_2 = 0
+    b0 = b1 = b2 = 0
+    one_shot_time = time.time()
+    while PROGRAM_RUN:
+
+        if GPIO.input(PIN_CLK_BIT) and time.time() - one_shot_time > 0.35:
+            one_shot_time = time.time()
+            io_0 = GPIO.input(PIN_BIT0)
+            io_1 = GPIO.input(PIN_BIT1)
+            io_2 = GPIO.input(PIN_BIT2)
+
+            p2, p1, p0 = b2, b1, b0
+            b2, b1, b0 = io_2, io_1, io_0
+
         if (b2, b1, b0) == (0, 0, 0):
-            pass
+            continue
 
         elif (b2, b1, b0) == (0, 0, 1):  # send data bit to Raspi..
             if not music_is_play and not music_is_run:
@@ -205,6 +252,7 @@ if __name__ == "__main__":
         elif (b2, b1, b0) == (0, 1, 0):
             if music_is_run and music_is_play:
                 music_is_play = False
+                send_clr()
 
         elif (b2, b1, b0) == (0, 1, 1):
             current_index = (current_index + 1) % N_SONG
@@ -227,8 +275,9 @@ if __name__ == "__main__":
         elif (b2, b1, b0) == (1, 1, 1):
             pass
 
-        elif (b2, b1, b0) == (2, 2, 2):  # for exit while true
+        elif (b2, b1, b0) == (2, 2, 2) or b2 >= 2:  # for exit while true
             PROGRAM_RUN = False
+            break
         else:
             print("ERROR : input fail plz try again.")
 
